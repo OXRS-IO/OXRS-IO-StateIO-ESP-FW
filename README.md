@@ -1,3 +1,3 @@
 # ESP32 State Input and Output firmware for [OXRS](https://oxrs.io)
 
-Coming soon ...
+See [here]https://oxrs.io/docs/firmware/state-io-esp32.html) for documentation.
