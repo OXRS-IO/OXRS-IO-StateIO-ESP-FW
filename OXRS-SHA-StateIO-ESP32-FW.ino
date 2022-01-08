@@ -31,10 +31,11 @@
 #define FW_NAME       "OXRS-SHA-StateIO-ESP32-FW"
 #define FW_SHORT_NAME "State Input & Output"
 #define FW_MAKER      "SuperHouse Automation"
-#define FW_VERSION    "0.0.2"
+#define FW_VERSION    "0.0.3"
 
 
 /*--------------------------- Libraries ----------------------------------*/
+#include <Preferences.h>              // NVS
 #include <Adafruit_MCP23X17.h>        // For MCP23017 I/O buffers
 #include <OXRS_Rack32.h>              // Rack32 support
 #include <OXRS_Input.h>               // For input handling
@@ -58,6 +59,9 @@ const uint8_t MCP_COUNT             = sizeof(MCP_I2C_ADDRESS);
 // Speed up the I2C bus to get faster event handling
 #define       I2C_CLOCK_SPEED       400000L
 
+// default io configuration (input only)
+#define       IO_CONFIG_DEFAULT     8  
+
 /*--------------------------- Global Variables ---------------------------*/
 // Each bit corresponds to an MCP found on the IC2 bus
 uint8_t g_mcps_found  = 0;
@@ -72,11 +76,8 @@ uint8_t g_mcps_found  = 0;
  *  4 -> 4 INP / 4 OUTP ; PORT_LAYOUT_IO_64_64
  *  6 -> 6 INP / 2 OUTP ; PORT_LAYOUT_IO_96_32
  *  8 -> 8 INP / 0 OUTP ; PORT_LAYOUT_INPUT_AUTO  (input only)
- *  
- *  TODO : make this configurable at runtime and stored in SPIFFS
- *         which means : there is single FW that supports "everything" between all INP and all OUTP
  */
- int  mcp_output_start  = 4 ;
+ int  g_mcp_output_start  = IO_CONFIG_DEFAULT ;
 
 /*--------------------------- Global Objects -----------------------------*/
 // Rack32 handler
@@ -90,6 +91,9 @@ OXRS_Input oxrsInput[MCP_COUNT];
 
 // Output handlers
 OXRS_Output oxrsOutput[MCP_COUNT];
+
+// non volatile storage
+Preferences nvs;
 
 /*--------------------------- Program ------------------------------------*/
 /**
@@ -106,6 +110,10 @@ void setup()
   Serial.print  (F("VERSION:  ")); Serial.println(FW_VERSION);
   Serial.println(F("========================================"));
 
+  // read io configuration from nvs and set variable
+  nvs.begin("StateIO", false);
+  g_mcp_output_start = getIoConfig();
+  
   // Start the I2C bus
   Wire.begin();
 
@@ -115,15 +123,15 @@ void setup()
   // Start Rack32 hardware
   rack32.begin(jsonConfig, jsonCommand);
 
-  // Set up port display (depends on mcp_output_start)
-  switch (mcp_output_start) 
+  // Set up port display (depends on g_mcp_output_start)
+  switch (g_mcp_output_start) 
   {
     case 0:   rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO); break;
     case 2:   rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_32_96); break;
     case 4:   rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_64_64); break;
     case 6:   rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_96_32); break;
     case 8:   rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_INPUT_AUTO); break;
-    default:  Serial.println(F("[stio] invalid 'mcp_output_start' "));
+    default:  Serial.println(F("[stio] invalid 'g_mcp_output_start' "));
   }
   
   // Set up config/command schema (for self-discovery and adoption)
@@ -146,7 +154,7 @@ void loop()
       continue;
       
     // handle inputs      
-    if (mcp < mcp_output_start)
+    if (mcp < g_mcp_output_start)
     {
        // Read the values for all 16 pins on this MCP
       uint16_t io_value = mcp23017[mcp].readGPIOAB();
@@ -184,8 +192,18 @@ void setConfigSchema()
   StaticJsonDocument<2048> json;
   JsonVariant config = json.as<JsonVariant>();
   
-  if (mcp_output_start > 0) inputConfigSchema(config);
-  if (mcp_output_start < 8) outputConfigSchema(config);
+  if (g_mcp_output_start > 0) inputConfigSchema(config);
+  if (g_mcp_output_start < 8) outputConfigSchema(config);
+
+  // add ioconfig
+  JsonObject ioconfig = json.createNestedObject("ioconfig");
+  ioconfig["type"] = "string";
+  JsonArray ioconfigEnum = ioconfig.createNestedArray("enum");
+  ioconfigEnum.add("io_128_0");
+  ioconfigEnum.add("io_32_96");
+  ioconfigEnum.add("io_64_64");
+  ioconfigEnum.add("io_96_32");
+  ioconfigEnum.add("io_0_128");
 
   // Pass our config schema down to the Rack32 library
   rack32.setConfigSchema(config);
@@ -272,6 +290,12 @@ void jsonConfig(JsonVariant json)
       jsonOutputConfig(output);
     }
   }
+
+  if (json.containsKey("ioconfig"))
+  {
+    jsonIoConfig(json["ioconfig"]);
+  }
+  
 }
 
 void jsonInputConfig(JsonVariant json)
@@ -384,6 +408,27 @@ void jsonOutputConfig(JsonVariant json)
   }
 }
 
+void jsonIoConfig(const char* config)
+{
+  char io_config = 0xff;
+  if (strcmp(config, "io_128_0") == 0) io_config = 8;
+  if (strcmp(config, "io_32_96") == 0) io_config = 2;
+  if (strcmp(config, "io_64_64") == 0) io_config = 4;
+  if (strcmp(config, "io_96_32") == 0) io_config = 6;
+  if (strcmp(config, "io_0_128") == 0) io_config = 0;
+
+  if (io_config == 0xff)
+  {
+    Serial.println(F("[stio] invalid ioconfig type"));
+  }
+  else
+  {
+    // restart if io_config has changed
+    if (saveIoConfig(io_config))  
+      ESP.restart(); 
+  }
+}
+
 /**
   Command handler
  */
@@ -393,7 +438,7 @@ void setCommandSchema()
   StaticJsonDocument<2048> json;
   JsonVariant command = json.as<JsonVariant>();
   
-  if (mcp_output_start < 8) outputCommandSchema(command);
+  if (g_mcp_output_start < 8) outputCommandSchema(command);
 
   // Pass our command schema down to the Rack32 library
   rack32.setCommandSchema(command);
@@ -506,19 +551,19 @@ uint8_t getMinInputIndex()
 uint8_t getMaxInputIndex()
 {
   // Remember our indexes are 1-based
-  return mcp_output_start * MCP_PIN_COUNT; 
+  return g_mcp_output_start * MCP_PIN_COUNT; 
 }
 
 uint8_t getMinOutputIndex()
 {
   // Remember our indexes are 1-based
-  return mcp_output_start * MCP_PIN_COUNT + 1; 
+  return g_mcp_output_start * MCP_PIN_COUNT + 1; 
 }
 
 uint8_t getMaxOutputIndex()
 {
   // search for highest MCP found
-  for (int i = 7; i >= mcp_output_start; i--)
+  for (int i = 7; i >= g_mcp_output_start; i--)
   {
     if (bitRead(g_mcps_found, i)) return (i+1) * MCP_PIN_COUNT;
   }
@@ -790,7 +835,7 @@ void scanI2CBus()
     {
       bitWrite(g_mcps_found, mcp, 1);
       // configure  input devices
-      if ( mcp < mcp_output_start)
+      if ( mcp < g_mcp_output_start)
       {     
         // If an MCP23017 was found then initialise as input and configure the inputs
         mcp23017[mcp].begin_I2C(MCP_I2C_ADDRESS[mcp]);
@@ -827,5 +872,31 @@ void scanI2CBus()
     {
       Serial.println(F("empty"));
     }
+  }
+}
+
+/*
+ * NVS handlers
+ */
+char getIoConfig()
+{
+  char io_config = nvs.getChar("io_config", 0xff);
+  
+  if (io_config == 0xff) return (IO_CONFIG_DEFAULT);
+  return (io_config);
+}
+
+bool saveIoConfig(char new_val)
+{
+  // new value exitst in NVS - do nothing
+  if (new_val == getIoConfig())
+  {
+    return false;
+  }
+  // store new value and report back the change 
+  else
+  {
+    nvs.putChar("io_config", new_val);
+    return true;
   }
 }
