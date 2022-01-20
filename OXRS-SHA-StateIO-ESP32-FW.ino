@@ -104,11 +104,17 @@ void setup()
   // Start the I2C bus
   Wire.begin();
 
-  // Scan the I2C bus and set up I/O buffers
+  // Scan the I2C bus
   scanI2CBus();
 
   // Start Rack32 hardware
   rack32.begin(jsonConfig, jsonCommand);
+
+  // set up I2C-I/O buffers
+  configureI2CBus();
+  
+  // Speed up I2C clock for faster scan rate (after bus scan)
+  Wire.setClock(I2C_CLOCK_SPEED);
 
   // Set up port display (depends on g_mcp_output_start)
   switch (g_mcp_output_start) 
@@ -128,9 +134,6 @@ void setup()
   // Set up config/command schema (for self-discovery and adoption)
   setConfigSchema();
   setCommandSchema();
-  
-  // Speed up I2C clock for faster scan rate (after bus scan)
-  Wire.setClock(I2C_CLOCK_SPEED);
 }
 
 /**
@@ -834,16 +837,28 @@ void scanI2CBus()
 
   for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
   {
-    Serial.print(F(" - 0x"));
-    Serial.print(MCP_I2C_ADDRESS[mcp], HEX);
-    Serial.print(F("..."));
-
     // Check if there is anything responding on this address
     Wire.beginTransmission(MCP_I2C_ADDRESS[mcp]);
     if (Wire.endTransmission() == 0)
     {
       bitWrite(g_mcps_found, mcp, 1);
+    }
+  }
+}
 
+void configureI2CBus()
+{
+  Serial.println(F("[stio] configuring I/O buffers..."));
+
+  for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
+  {
+    Serial.print(F(" - 0x"));
+    Serial.print(MCP_I2C_ADDRESS[mcp], HEX);
+    Serial.print(F("..."));
+
+    // Check if an MCP was found on this address
+    if (bitRead(g_mcps_found, mcp))
+    {
       // If an MCP23017 was found then initialise
       mcp23017[mcp].begin_I2C(MCP_I2C_ADDRESS[mcp]);
 
