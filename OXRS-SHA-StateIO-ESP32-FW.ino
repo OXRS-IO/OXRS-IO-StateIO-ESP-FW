@@ -32,7 +32,7 @@
 #define FW_NAME       "OXRS-SHA-StateIO-ESP32-FW"
 #define FW_SHORT_NAME "State I/O"
 #define FW_MAKER      "SuperHouse Automation"
-#define FW_VERSION    "0.0.4"
+#define FW_VERSION    "0.0.5"
 
 /*--------------------------- Libraries ----------------------------------*/
 #include <Adafruit_MCP23X17.h>        // For MCP23017 I/O buffers
@@ -62,7 +62,17 @@ const uint8_t MCP_COUNT             = sizeof(MCP_I2C_ADDRESS);
 // Each bit corresponds to an MCP found on the IC2 bus
 uint8_t g_mcps_found = 0;
 
+// How many pins on each MCP are we controlling (defaults to all 16)
+// Set via "outputsPerMcp" integer config option - should be set via
+// the REST API so it is persisted to SPIFFS and loaded early enough
+// in the boot sequence to configure the LCD and adoption payloads
+uint8_t g_mcp_output_pins = MCP_PIN_COUNT;
+
 // This is the only variable that needs to be set to define the partitions for INP and OUTP ports
+// Set via "ioConfig" enum (1 out of 5) config option - should be set via
+// the REST API so it is persisted to SPIFFS and loaded early enough
+// in the boot sequence to configure the MCP io-expander, LCD and adoption payloads
+//
 // I2C_adr [0 to (mcp_output_start-1)] = IN; 
 // I2C_adr [mcp_output_start to 7] = OUT
 // for mcp_output_start only 0, 2, 4, 6 and 8 are supported  
@@ -117,20 +127,37 @@ void setup()
   Wire.setClock(I2C_CLOCK_SPEED);
 
   // Set up port display (depends on g_mcp_output_start)
-  switch (g_mcp_output_start) 
+  bool err_output_start = false;
+  if (g_mcp_output_pins == 8)
   {
-    case 0: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO);  break;
-    case 2: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_32_96);     break;
-    case 4: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_64_64);     break;
-    case 6: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_96_32);     break;
-    case 8: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);   break;
-    default:
+    switch (g_mcp_output_start) 
     {
-      Serial.print(F("[stio] invalid g_mcp_output_start: "));
-      Serial.println(g_mcp_output_start);
+      case 0: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO_8);  break;
+      case 2: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_32_96_8);     break;
+      case 4: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_64_64_8);     break;
+      case 6: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_96_32_8);     break;
+      case 8: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);     break;
+      default: err_output_start = true;
     }
   }
-  
+  else
+  {
+    switch (g_mcp_output_start) 
+    {
+      case 0: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO);  break;
+      case 2: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_32_96);     break;
+      case 4: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_64_64);     break;
+      case 6: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_96_32);     break;
+      case 8: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);   break;
+      default: err_output_start = true;
+    }
+  }
+  if (err_output_start)
+  {
+    Serial.print(F("[stio] invalid g_mcp_output_start: "));
+    Serial.println(g_mcp_output_start);
+  }
+
   // Set up config/command schema (for self-discovery and adoption)
   setConfigSchema();
   setCommandSchema();
@@ -188,6 +215,12 @@ void setConfigSchema()
   ioConfigEnum.add("io_64_64");
   ioConfigEnum.add("io_32_96");
   ioConfigEnum.add("io_0_128");
+
+  JsonObject outputsPerMcp = json.createNestedObject("outputsPerMcp");
+  outputsPerMcp["type"] = "integer";
+  outputsPerMcp["minimum"] = 8;
+  outputsPerMcp["maximum"] = MCP_PIN_COUNT;
+  outputsPerMcp["multipleOf"] = 8;
 
   // Do we have any input MCPs?
   if (isInputMcp(0))
@@ -275,6 +308,11 @@ void jsonConfig(JsonVariant json)
   {
     jsonIoConfig(json["ioConfig"]);
   }
+  
+  if (json.containsKey("outputsPerMcp"))
+  {
+    g_mcp_output_pins = json["outputsPerMcp"].as<uint8_t>();
+  }
 
   if (json.containsKey("inputs"))
   {
@@ -329,7 +367,7 @@ void jsonInputConfig(JsonVariant json)
   // Work out the MCP and pin we are configuring
   int mcp = (index - 1) / MCP_PIN_COUNT;
   int pin = (index - 1) % MCP_PIN_COUNT;
-
+  
   if (json.containsKey("type"))
   {
     if (strcmp(json["type"], "button") == 0)
@@ -370,8 +408,8 @@ void jsonOutputConfig(JsonVariant json)
   if (index == 0) return;
 
   // Work out the MCP and pin we are configuring
-  uint8_t mcp = (index - 1) / MCP_PIN_COUNT;
-  uint8_t pin = (index - 1) % MCP_PIN_COUNT;
+  uint8_t mcp = outpIndex2Mcp(index);
+  uint8_t pin = outpIndex2Pin(index);
   
   if (json.containsKey("type"))
   {
@@ -416,8 +454,8 @@ void jsonOutputConfig(JsonVariant json)
     {
       uint8_t interlock_index = json["interlockIndex"].as<uint8_t>();
      
-      uint8_t interlock_mcp = (interlock_index - 1) / MCP_PIN_COUNT;
-      uint8_t interlock_pin = (interlock_index - 1) % MCP_PIN_COUNT;
+      uint8_t interlock_mcp = outpIndex2Mcp(interlock_index);
+      uint8_t interlock_pin = outpIndex2Pin(interlock_index);
       
       if (interlock_mcp == mcp)
       {
@@ -500,8 +538,8 @@ void jsonOutputCommand(JsonVariant json)
   if (index == 0) return;
 
   // Work out the MCP and pin we are processing
-  uint8_t mcp = (index - 1) / MCP_PIN_COUNT;
-  uint8_t pin = (index - 1) % MCP_PIN_COUNT;
+  uint8_t mcp = outpIndex2Mcp(index);
+  uint8_t pin = outpIndex2Pin(index);
   
   // Get the output type for this pin
   uint8_t type = oxrsOutput[mcp].getType(pin);
@@ -566,7 +604,16 @@ uint8_t getMinInputIndex()
 uint8_t getMaxInputIndex()
 {
   // Remember our indexes are 1-based
-  return g_mcp_output_start * MCP_PIN_COUNT; 
+  // Search for highest input MCP found
+  for (int i = g_mcp_output_start - 1; i >= 0; i--)
+  {
+    if (bitRead(g_mcps_found, i))
+    {
+        return ((i + 1) * MCP_PIN_COUNT);
+    }
+  } 
+  // No input MCP found
+  return getMinInputIndex(); 
 }
 
 uint8_t getMinOutputIndex()
@@ -582,13 +629,24 @@ uint8_t getMaxOutputIndex()
   {
     if (bitRead(g_mcps_found, i))
     {
-      return (i + 1) * MCP_PIN_COUNT;
+        return ((i + 1 - g_mcp_output_start) * g_mcp_output_pins + getMinOutputIndex() - 1);
     }
   }
-  
   // No output MCP found
   return getMinOutputIndex(); 
 }
+
+uint8_t outpIndex2Mcp(int index)
+{
+  return ((index - getMinOutputIndex()) / g_mcp_output_pins + g_mcp_output_start);
+}
+
+uint8_t outpIndex2Pin(int index)
+{
+  return ((index - getMinOutputIndex()) % g_mcp_output_pins);
+}
+
+
 
 uint8_t getInputIndex(JsonVariant json)
 {
@@ -812,13 +870,12 @@ void inputEvent(uint8_t id, uint8_t input, uint8_t type, uint8_t state)
   publishInputEvent(index, type, state);
 }
 
-
 void outputEvent(uint8_t id, uint8_t output, uint8_t type, uint8_t state)
 {
   // Determine the index (1-based)
   uint8_t mcp = id;
   uint8_t pin = output;
-  uint8_t raw_index = (MCP_PIN_COUNT * mcp) + pin;
+  uint8_t raw_index = (mcp - g_mcp_output_start) * g_mcp_output_pins + getMinOutputIndex() - 1 + pin;
   uint8_t index = raw_index + 1;
   
   // Update the MCP pin - i.e. turn the relay on/off (LOW/HIGH)
@@ -843,6 +900,12 @@ void scanI2CBus()
     {
       bitWrite(g_mcps_found, mcp, 1);
     }
+    
+    // Initialise input handlers (default to TOGGLE)
+    oxrsInput[mcp].begin(inputEvent, TOGGLE);
+    
+    // Initialise output handlers
+    oxrsOutput[mcp].begin(outputEvent);
   }
 }
 
@@ -869,10 +932,6 @@ void configureI2CBus()
         {
           mcp23017[mcp].pinMode(pin, MCP_INTERNAL_PULLUPS ? INPUT_PULLUP : INPUT);
         }
-  
-        // Initialise input handlers (default to TOGGLE)
-        oxrsInput[mcp].begin(inputEvent, TOGGLE);
-  
         Serial.print(F("MCP23017 [input]"));
         if (MCP_INTERNAL_PULLUPS) { Serial.print(F(" (internal pullups)")); }
         Serial.println();
@@ -885,11 +944,7 @@ void configureI2CBus()
           mcp23017[mcp].pinMode(pin, OUTPUT);
           mcp23017[mcp].digitalWrite(pin, RELAY_OFF);
         }
-  
-        // Initialise output handlers
-        oxrsOutput[mcp].begin(outputEvent);
-        
-        Serial.println(F("MCP23017 [output]"));
+         Serial.println(F("MCP23017 [output]"));
       }
     }
     else
