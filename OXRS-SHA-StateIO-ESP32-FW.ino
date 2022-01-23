@@ -209,7 +209,7 @@ void setConfigSchema()
   
   JsonObject ioConfig = json.createNestedObject("ioConfig");
   ioConfig["type"] = "string";
-  ioConfig["description"] = "Hint ! Restart your device when changed to make effective!";
+  ioConfig["description"] = "Hint ! A restart is required before changes will take effect!";
   JsonArray ioConfigEnum = ioConfig.createNestedArray("enum");
   ioConfigEnum.add("io_128_0");
   ioConfigEnum.add("io_96_32");
@@ -219,7 +219,7 @@ void setConfigSchema()
 
   JsonObject outputsPerMcp = json.createNestedObject("outputsPerMcp");
   outputsPerMcp["type"] = "integer";
-  outputsPerMcp["description"] = "Hint ! Restart your device when changed to make effective!";
+  outputsPerMcp["description"] = "Hint ! A restart is required before changes will take effect!";
   outputsPerMcp["minimum"] = 8;
   outputsPerMcp["maximum"] = MCP_PIN_COUNT;
   outputsPerMcp["multipleOf"] = 8;
