@@ -137,11 +137,11 @@ void setup()
   {
     switch (g_mcp_output_start) 
     {
-      case 0: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO_8);  break;
-      case 2: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_32_96_8);     break;
-      case 4: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_64_64_8);     break;
-      case 6: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_96_32_8);     break;
-      case 8: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);     break;
+      case 0: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO_8);  break;
+      case 2: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96_8);     break;
+      case 4: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64_8);     break;
+      case 6: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32_8);     break;
+      case 8: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);     break;
       default: err_output_start = true;
     }
   }
@@ -149,11 +149,11 @@ void setup()
   {
     switch (g_mcp_output_start) 
     {
-      case 0: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO);  break;
-      case 2: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_32_96);     break;
-      case 4: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_64_64);     break;
-      case 6: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_IO_96_32);     break;
-      case 8: rack32.setDisplayPorts(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);   break;
+      case 0: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO);  break;
+      case 2: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96);     break;
+      case 4: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64);     break;
+      case 6: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32);     break;
+      case 8: rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);   break;
       default: err_output_start = true;
     }
   }
@@ -213,8 +213,9 @@ void setConfigSchema()
   JsonVariant config = json.as<JsonVariant>();
   
   JsonObject ioConfig = json.createNestedObject("ioConfig");
+  ioConfig["title"] = "Configuration Of Input/Output Ports. ! HINT ! A restart is required before changes will take effect! Reload this browser page after restart has finished!";
+  ioConfig["description"] = "Select the desired partioning of Input and Output ports";
   ioConfig["type"] = "string";
-  ioConfig["description"] = "Hint ! A restart is required before changes will take effect!";
   JsonArray ioConfigEnum = ioConfig.createNestedArray("enum");
   ioConfigEnum.add("io_128_0");
   ioConfigEnum.add("io_96_32");
@@ -223,8 +224,10 @@ void setConfigSchema()
   ioConfigEnum.add("io_0_128");
 
   JsonObject outputsPerMcp = json.createNestedObject("outputsPerMcp");
-  outputsPerMcp["type"] = "integer";
+  outputsPerMcp["title"] = "Number Of Outputs Per MCP. ! HINT ! A restart is required before changes will take effect!";
   outputsPerMcp["description"] = "Hint ! A restart is required before changes will take effect!";
+  outputsPerMcp["description"] = "Number of outputs connected to each MCP23017 I/O chip, which is dependent on the relay driver used (must be either 8 or 16, defaults to 16).";
+  outputsPerMcp["type"] = "integer";
   outputsPerMcp["minimum"] = 8;
   outputsPerMcp["maximum"] = MCP_PIN_COUNT;
   outputsPerMcp["multipleOf"] = 8;
@@ -248,9 +251,13 @@ void setConfigSchema()
 void inputConfigSchema(JsonVariant json)
 {
   JsonObject defaultInputType = json.createNestedObject("defaultInputType");
+  defaultInputType["title"] = "Default Input Type";
+  defaultInputType["description"] = "Set the default input type for anything without explicit configuration below. Defaults to ‘switch’.";
   createInputTypeEnum(defaultInputType);
 
   JsonObject inputs = json.createNestedObject("inputs");
+  inputs["title"] = "Input Configuration";
+  inputs["description"] = "Add configuration for each input in use on your device. The 1-based index specifies which input you wish to configure. The type defines how an input is monitored and what events are generated. Inverting an input swaps the 'active' state (only useful for 'contact' and 'switch' inputs).";
   inputs["type"] = "array";
   
   JsonObject items = inputs.createNestedObject("items");
@@ -259,26 +266,33 @@ void inputConfigSchema(JsonVariant json)
   JsonObject properties = items.createNestedObject("properties");
 
   JsonObject index = properties.createNestedObject("index");
+  index["title"] = "Index";
   index["type"] = "integer";
-  index["minimum"] = getMinInputIndex();;
+  index["minimum"] = getMinInputIndex();
   index["maximum"] = getMaxInputIndex();
 
   JsonObject type = properties.createNestedObject("type");
+  type["title"] = "Type";
   createInputTypeEnum(type);
 
   JsonObject invert = properties.createNestedObject("invert");
+  invert["title"] = "Invert";
   invert["type"] = "boolean";
 
   JsonArray required = items.createNestedArray("required");
-  required.add("index"); 
+  required.add("index");
 }
 
 void outputConfigSchema(JsonVariant json)
 {
   JsonObject defaultOutputType = json.createNestedObject("defaultOutputType");
+  defaultOutputType["title"] = "Default Output Type";
+  defaultOutputType["description"] = "Set the default output type for anything without explicit configuration below. Defaults to ‘relay’.";
   createOutputTypeEnum(defaultOutputType);
 
   JsonObject outputs = json.createNestedObject("outputs");
+  outputs["title"] = "Output Configuration";
+  outputs["description"] = "Add configuration for each output in use on your device. The 1-based index specifies which output you wish to configure. The type defines how an output is controlled. For ‘timer’ outputs you can define how long it should stay ON (defaults to 60 seconds). Interlocking two outputs ensures they are never both on at the same time (useful for controlling motors).";
   outputs["type"] = "array";
   
   JsonObject items = outputs.createNestedObject("items");
@@ -287,18 +301,22 @@ void outputConfigSchema(JsonVariant json)
   JsonObject properties = items.createNestedObject("properties");
 
   JsonObject index = properties.createNestedObject("index");
+  index["title"] = "Index";
   index["type"] = "integer";
-  index["minimum"] = getMinOutputIndex();;
+  index["minimum"] = getMinOutputIndex();
   index["maximum"] = getMaxOutputIndex();
 
   JsonObject type = properties.createNestedObject("type");
+  type["title"] = "Type";
   createOutputTypeEnum(type);
 
   JsonObject timerSeconds = properties.createNestedObject("timerSeconds");
+  timerSeconds["title"] = "Timer (seconds)";
   timerSeconds["type"] = "integer";
   timerSeconds["minimum"] = 1;
 
   JsonObject interlockIndex = properties.createNestedObject("interlockIndex");
+  interlockIndex["title"] = "Interlock With Index";
   interlockIndex["type"] = "integer";
   interlockIndex["minimum"] = getMinOutputIndex();
   interlockIndex["maximum"] = getMaxOutputIndex();
@@ -488,6 +506,8 @@ void setCommandSchema()
 void outputCommandSchema(JsonVariant json)
 {
   JsonObject outputs = json.createNestedObject("outputs");
+  outputs["title"] = "Output Commands";
+  outputs["description"] = "Send commands to one or more outputs on your device. The 1-based index specifies which output you wish to command. The type is used to validate the configuration for this output matches the command. Supported commands are ‘on’ or ‘off’ to change the output state, or ‘query’ to publish the current state to MQTT.";
   outputs["type"] = "array";
   
   JsonObject items = outputs.createNestedObject("items");
@@ -496,14 +516,17 @@ void outputCommandSchema(JsonVariant json)
   JsonObject properties = items.createNestedObject("properties");
 
   JsonObject index = properties.createNestedObject("index");
+  index["title"] = "Index";
   index["type"] = "integer";
   index["minimum"] = getMinOutputIndex();
   index["maximum"] = getMaxOutputIndex();
 
   JsonObject type = properties.createNestedObject("type");
+  type["title"] = "Type";
   createOutputTypeEnum(type);
 
   JsonObject command = properties.createNestedObject("command");
+  command["title"] = "Command";
   command["type"] = "string";
   JsonArray commandEnum = command.createNestedArray("enum");
   commandEnum.add("query");
