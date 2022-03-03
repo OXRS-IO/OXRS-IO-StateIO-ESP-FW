@@ -32,7 +32,7 @@
 #define FW_NAME       "OXRS-SHA-StateIO-ESP32-FW"
 #define FW_SHORT_NAME "State I/O"
 #define FW_MAKER      "SuperHouse Automation"
-#define FW_VERSION    "3.8.0"
+#define FW_VERSION    "3.10.0"
 
 /*--------------------------- Libraries ----------------------------------*/
 #include <Adafruit_MCP23X17.h>        // For MCP23017 I/O buffers
@@ -417,7 +417,7 @@ void jsonInputConfig(JsonVariant json)
 
     if (inputType != INVALID_INPUT_TYPE)
     {
-      oxrsInput[mcp].setType(pin, inputType);
+      setInputType(mcp, pin, inputType);
     }
   }
    
@@ -608,18 +608,20 @@ void createInputTypeEnum(JsonObject parent)
   typeEnum.add("contact");
   typeEnum.add("press");
   typeEnum.add("rotary");
+  typeEnum.add("security");
   typeEnum.add("switch");
   typeEnum.add("toggle");
 }
 
 uint8_t parseInputType(const char * inputType)
 {
-  if (strcmp(inputType, "button")  == 0) { return BUTTON; }
-  if (strcmp(inputType, "contact") == 0) { return CONTACT; }
-  if (strcmp(inputType, "press")   == 0) { return PRESS; }
-  if (strcmp(inputType, "rotary")  == 0) { return ROTARY; }
-  if (strcmp(inputType, "switch")  == 0) { return SWITCH; }
-  if (strcmp(inputType, "toggle")  == 0) { return TOGGLE; }
+  if (strcmp(inputType, "button")   == 0) { return BUTTON; }
+  if (strcmp(inputType, "contact")  == 0) { return CONTACT; }
+  if (strcmp(inputType, "press")    == 0) { return PRESS; }
+  if (strcmp(inputType, "rotary")   == 0) { return ROTARY; }
+  if (strcmp(inputType, "security") == 0) { return SECURITY; }
+  if (strcmp(inputType, "switch")   == 0) { return SWITCH; }
+  if (strcmp(inputType, "toggle")   == 0) { return TOGGLE; }
 
   Serial.println(F("[stio] invalid input type"));
   return INVALID_INPUT_TYPE;
@@ -635,9 +637,26 @@ void setDefaultInputType(uint8_t inputType)
 
     for (uint8_t pin = 0; pin < MCP_PIN_COUNT; pin++)
     {
-      oxrsInput[mcp].setType(pin, inputType);
+      setInputType(mcp, pin, inputType);
     }
   }
+}
+
+void setInputType(uint8_t mcp, uint8_t pin, uint8_t inputType)
+{
+  // Port config constant comes from the LCD library
+  switch (inputType)
+  {
+    case SECURITY:
+      rack32.setDisplayPortConfig(mcp, pin, PORT_CONFIG_SECURITY);
+      break;
+    default:
+      rack32.setDisplayPortConfig(mcp, pin, PORT_CONFIG_DEFAULT);
+      break;
+  }
+
+  // Pass this update to the input handler
+  oxrsInput[mcp].setType(pin, inputType);
 }
 
 void createOutputTypeEnum(JsonObject parent)
@@ -780,12 +799,18 @@ uint8_t getOutputIndex(JsonVariant json)
 
 void publishInputEvent(uint8_t index, uint8_t type, uint8_t state)
 {
-  char inputType[8];
+  // Calculate the port and channel for this index (all 1-based)
+  uint8_t port = ((index - 1) / 4) + 1;
+  uint8_t channel = index - ((port - 1) * 4);
+
+  char inputType[9];
   getInputType(inputType, type);
   char eventType[7];
   getInputEventType(eventType, type, state);
 
-  StaticJsonDocument<64> json;
+  StaticJsonDocument<128> json;
+  json["port"] = port;
+  json["channel"] = channel;
   json["index"] = index;
   json["type"] = inputType;
   json["event"] = eventType;
@@ -839,6 +864,9 @@ void getInputType(char inputType[], uint8_t type)
       break;
     case ROTARY:
       sprintf_P(inputType, PSTR("rotary"));
+      break;
+    case SECURITY:
+      sprintf_P(inputType, PSTR("security"));
       break;
     case SWITCH:
       sprintf_P(inputType, PSTR("switch"));
@@ -899,6 +927,26 @@ void getInputEventType(char eventType[], uint8_t type, uint8_t state)
           break;
         case HIGH_EVENT:
           sprintf_P(eventType, PSTR("down"));
+          break;
+      }
+      break;
+    case SECURITY:
+      switch (state)
+      {
+        case HIGH_EVENT:
+          sprintf_P(eventType, PSTR("normal"));
+          break;
+        case LOW_EVENT:
+          sprintf_P(eventType, PSTR("alarm"));
+          break;
+        case TAMPER_EVENT:
+          sprintf_P(eventType, PSTR("tamper"));
+          break;
+        case SHORT_EVENT:
+          sprintf_P(eventType, PSTR("short"));
+          break;
+        case FAULT_EVENT:
+          sprintf_P(eventType, PSTR("fault"));
           break;
       }
       break;
