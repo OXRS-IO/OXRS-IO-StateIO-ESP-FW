@@ -17,6 +17,7 @@
 
 
 /*--------------------------- Libraries ----------------------------------*/
+#include <Arduino.h>
 #include <Adafruit_MCP23X17.h>        // For MCP23017 I/O buffers
 #include <OXRS_Rack32.h>              // Rack32 support
 #include <OXRS_Input.h>               // For input handling
