@@ -175,7 +175,7 @@ uint8_t parseInputType(const char *inputType)
     return TOGGLE;
   }
 
-  Serial.println(F("[stio] invalid input type"));
+  rack32.println(F("[stio] invalid input type"));
   return INVALID_INPUT_TYPE;
 }
 
@@ -359,6 +359,15 @@ void setInputInvert(uint8_t mcp, uint8_t pin, int invert)
   oxrsInput[mcp].setInvert(pin, invert);
 }
 
+void setInputDisabled(uint8_t mcp, uint8_t pin, int disabled)
+{
+  // Configure the display
+  rack32.setDisplayPinDisabled(mcp, pin, disabled);
+
+  // Pass this update to the input handler
+  oxrsInput[mcp].setDisabled(pin, disabled);
+}
+
 void setDefaultInputType(uint8_t inputType)
 {
   // Set all pins on all MCPs to this default input type
@@ -398,7 +407,7 @@ uint8_t parseOutputType(const char *outputType)
     return TIMER;
   }
 
-  Serial.println(F("[stio] invalid output type"));
+  rack32.println(F("[stio] invalid output type"));
   return INVALID_OUTPUT_TYPE;
 }
 
@@ -446,7 +455,7 @@ void inputConfigSchema(JsonVariant json)
 
   JsonObject inputs = json.createNestedObject("inputs");
   inputs["title"] = "Input Configuration";
-  inputs["description"] = "Add configuration for each input in use on your device. The 1-based index specifies which input you wish to configure. The type defines how an input is monitored and what events are generated. Inverting an input swaps the 'active' state (only useful for 'contact' and 'switch' inputs).";
+  inputs["description"] = "Add configuration for each input in use on your device. The 1-based index specifies which input you wish to configure. The type defines how an input is monitored and what events are emitted. Inverting an input swaps the 'active' state (only useful for 'contact' and 'switch' inputs). Disabling an input stops any events being emitted.";
   inputs["type"] = "array";
 
   JsonObject items = inputs.createNestedObject("items");
@@ -467,6 +476,10 @@ void inputConfigSchema(JsonVariant json)
   JsonObject invert = properties.createNestedObject("invert");
   invert["title"] = "Invert";
   invert["type"] = "boolean";
+
+  JsonObject disabled = properties.createNestedObject("disabled");
+  disabled["title"] = "Disabled";
+  disabled["type"] = "boolean";
 
   JsonArray required = items.createNestedArray("required");
   required.add("index");
@@ -583,7 +596,7 @@ void jsonIoConfig(const char *ioConfig)
   }
   else
   {
-    Serial.println(F("[stio] invalid ioConfig enum"));
+    rack32.println(F("[stio] invalid ioConfig enum"));
   }
 }
 
@@ -591,7 +604,7 @@ uint8_t getInputIndex(JsonVariant json)
 {
   if (!json.containsKey("index"))
   {
-    Serial.println(F("[stio] missing input index"));
+    rack32.println(F("[stio] missing input index"));
     return 0;
   }
   
@@ -600,7 +613,7 @@ uint8_t getInputIndex(JsonVariant json)
   // Check the index is valid for this device
   if (index < getMinInputIndex() || index > getMaxInputIndex())
   {
-    Serial.println(F("[stio] invalid input index"));
+    rack32.println(F("[stio] invalid input index"));
     return 0;
   }
 
@@ -628,7 +641,12 @@ void jsonInputConfig(JsonVariant json)
    
   if (json.containsKey("invert"))
   {
-    oxrsInput[mcp].setInvert(pin, json["invert"].as<bool>());
+    setInputInvert(mcp, pin, json["invert"].as<bool>());
+  }
+
+  if (json.containsKey("disabled"))
+  {
+    setInputDisabled(mcp, pin, json["disabled"].as<bool>());
   }
 }
 
@@ -636,7 +654,7 @@ uint8_t getOutputIndex(JsonVariant json)
 {
   if (!json.containsKey("index"))
   {
-    Serial.println(F("[stio] missing output index"));
+    rack32.println(F("[stio] missing output index"));
     return 0;
   }
   
@@ -645,7 +663,7 @@ uint8_t getOutputIndex(JsonVariant json)
   // Check the index is valid for this device
   if (index < getMinOutputIndex() || index > getMaxOutputIndex())
   {
-    Serial.println(F("[stio] invalid output index"));
+    rack32.println(F("[stio] invalid output index"));
     return 0;
   }
 
@@ -703,7 +721,7 @@ void jsonOutputConfig(JsonVariant json)
       }
       else
       {
-        Serial.println(F("[stio] lock must be with pin on same mcp"));
+        rack32.println(F("[stio] lock must be with pin on same mcp"));
       }
     }
   }
@@ -850,7 +868,7 @@ void jsonOutputCommand(JsonVariant json)
   {
     if (parseOutputType(json["type"]) != type)
     {
-      Serial.println(F("[stio] command type doesn't match configured type"));
+      rack32.println(F("[stio] command type doesn't match configured type"));
       return;
     }
   }
@@ -876,7 +894,7 @@ void jsonOutputCommand(JsonVariant json)
       }
       else 
       {
-        Serial.println(F("[stio] invalid command"));
+        rack32.println(F("[stio] invalid command"));
       }
     }
   }
@@ -956,13 +974,13 @@ void outputEvent(uint8_t id, uint8_t output, uint8_t type, uint8_t state)
  */
 void configureI2CBus()
 {
-  Serial.println(F("[stio] configuring I/O buffers..."));
+  rack32.println(F("[stio] configuring I/O buffers..."));
 
   for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
   {
-    Serial.print(F(" - 0x"));
-    Serial.print(MCP_I2C_ADDRESS[mcp], HEX);
-    Serial.print(F("..."));
+    rack32.print(F(" - 0x"));
+    rack32.print(MCP_I2C_ADDRESS[mcp], HEX);
+    rack32.print(F("..."));
 
     // Check if an MCP was found on this address
     if (bitRead(g_mcps_found, mcp))
@@ -977,9 +995,9 @@ void configureI2CBus()
         {
           mcp23017[mcp].pinMode(pin, MCP_INTERNAL_PULLUPS ? INPUT_PULLUP : INPUT);
         }
-        Serial.print(F("MCP23017 [input]"));
-        if (MCP_INTERNAL_PULLUPS) { Serial.print(F(" (internal pullups)")); }
-        Serial.println();
+        rack32.print(F("MCP23017 [input]"));
+        if (MCP_INTERNAL_PULLUPS) { rack32.print(F(" (internal pullups)")); }
+        rack32.println();
       }
       else
       {
@@ -989,12 +1007,12 @@ void configureI2CBus()
           mcp23017[mcp].pinMode(pin, OUTPUT);
           mcp23017[mcp].digitalWrite(pin, RELAY_OFF);
         }
-         Serial.println(F("MCP23017 [output]"));
+         rack32.println(F("MCP23017 [output]"));
       }
     }
     else
     {
-      Serial.println(F("empty"));
+      rack32.println(F("empty"));
     }
   }
 }
@@ -1002,7 +1020,7 @@ void configureI2CBus()
 
 void scanI2CBus()
 {
-  Serial.println(F("[stio] scanning for I/O buffers..."));
+  rack32.println(F("[stio] scanning for I/O buffers..."));
 
   for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
   {
@@ -1096,8 +1114,8 @@ void setup()
   }
   if (err_output_start)
   {
-    Serial.print(F("[stio] invalid g_mcp_output_start: "));
-    Serial.println(g_mcp_output_start);
+    rack32.print(F("[stio] invalid g_mcp_output_start: "));
+    rack32.println(g_mcp_output_start);
   }
 
   // Set up config/command schema (for self-discovery and adoption)
