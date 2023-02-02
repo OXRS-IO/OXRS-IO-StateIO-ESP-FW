@@ -19,11 +19,16 @@
 /*--------------------------- Libraries ----------------------------------*/
 #include <Arduino.h>
 #include <Adafruit_MCP23X17.h>        // For MCP23017 I/O buffers
-#include <OXRS_Rack32.h>              // Rack32 support
 #include <OXRS_Input.h>               // For input handling
 #include <OXRS_Output.h>              // For output handling
-#include "logo.h"                     // Embedded maker logo
-
+#if defined(OXRS_RACK32)
+#include <OXRS_Rack32.h> // Rack32 support
+#include "logo.h"        // Embedded maker logo
+OXRS_Rack32 oxrs(FW_LOGO);
+#elif defined(OXRS_ROOM8266)
+#include <OXRS_Room8266.h> // Room8266 support
+OXRS_Room8266 oxrs;
+#endif
 /*--------------------------- Constants ----------------------------------*/
 // Serial
 #define       SERIAL_BAUD_RATE      115200
@@ -71,10 +76,8 @@ uint8_t g_mcp_output_pins = MCP_PIN_COUNT;
 // *  8 -> 8 INP / 0 OUTP ; PORT_LAYOUT_INPUT_AUTO  (input only)
 uint8_t g_mcp_output_start = MCP_COUNT;
 
+long _loopCounter = 0;
 /*--------------------------- Global Objects -----------------------------*/
-// Rack32 handler
-OXRS_Rack32 rack32(FW_LOGO);
-
 // I/O buffers
 Adafruit_MCP23X17 mcp23017[MCP_COUNT];
 
@@ -175,7 +178,7 @@ uint8_t parseInputType(const char *inputType)
     return TOGGLE;
   }
 
-  rack32.println(F("[stio] invalid input type"));
+  oxrs.println(F("[stio] invalid input type"));
   return INVALID_INPUT_TYPE;
 }
 
@@ -336,15 +339,17 @@ void getOutputEventType(char eventType[], uint8_t type, uint8_t state)
 void setInputType(uint8_t mcp, uint8_t pin, uint8_t inputType)
 {
   // Configure the display (type constant from LCD library)
+  #if defined(OXRS_RACK32)
   switch (inputType)
   {
   case SECURITY:
-    rack32.setDisplayPinType(mcp, pin, PIN_TYPE_SECURITY);
+    oxrs.setDisplayPinType(mcp, pin, PIN_TYPE_SECURITY);
     break;
   default:
-    rack32.setDisplayPinType(mcp, pin, PIN_TYPE_DEFAULT);
+    oxrs.setDisplayPinType(mcp, pin, PIN_TYPE_DEFAULT);
     break;
   }
+  #endif
 
   // Pass this update to the input handler
   oxrsInput[mcp].setType(pin, inputType);
@@ -353,7 +358,9 @@ void setInputType(uint8_t mcp, uint8_t pin, uint8_t inputType)
 void setInputInvert(uint8_t mcp, uint8_t pin, int invert)
 {
   // Configure the display
-  rack32.setDisplayPinInvert(mcp, pin, invert);
+  #if defined(OXRS_RACK32)
+  oxrs.setDisplayPinInvert(mcp, pin, invert);
+  #endif
 
   // Pass this update to the input handler
   oxrsInput[mcp].setInvert(pin, invert);
@@ -362,7 +369,9 @@ void setInputInvert(uint8_t mcp, uint8_t pin, int invert)
 void setInputDisabled(uint8_t mcp, uint8_t pin, int disabled)
 {
   // Configure the display
-  rack32.setDisplayPinDisabled(mcp, pin, disabled);
+  #if defined(OXRS_RACK32)
+  oxrs.setDisplayPinDisabled(mcp, pin, disabled);
+  #endif
 
   // Pass this update to the input handler
   oxrsInput[mcp].setDisabled(pin, disabled);
@@ -407,7 +416,7 @@ uint8_t parseOutputType(const char *outputType)
     return TIMER;
   }
 
-  rack32.println(F("[stio] invalid output type"));
+  oxrs.println(F("[stio] invalid output type"));
   return INVALID_OUTPUT_TYPE;
 }
 
@@ -569,7 +578,7 @@ void setConfigSchema()
   }
 
   // Pass our config schema down to the Rack32 library
-  rack32.setConfigSchema(config);
+  oxrs.setConfigSchema(config);
 }
 
 void jsonIoConfig(const char *ioConfig)
@@ -596,7 +605,7 @@ void jsonIoConfig(const char *ioConfig)
   }
   else
   {
-    rack32.println(F("[stio] invalid ioConfig enum"));
+    oxrs.println(F("[stio] invalid ioConfig enum"));
   }
 }
 
@@ -604,7 +613,7 @@ uint8_t getInputIndex(JsonVariant json)
 {
   if (!json.containsKey("index"))
   {
-    rack32.println(F("[stio] missing input index"));
+    oxrs.println(F("[stio] missing input index"));
     return 0;
   }
   
@@ -613,7 +622,7 @@ uint8_t getInputIndex(JsonVariant json)
   // Check the index is valid for this device
   if (index < getMinInputIndex() || index > getMaxInputIndex())
   {
-    rack32.println(F("[stio] invalid input index"));
+    oxrs.println(F("[stio] invalid input index"));
     return 0;
   }
 
@@ -654,7 +663,7 @@ uint8_t getOutputIndex(JsonVariant json)
 {
   if (!json.containsKey("index"))
   {
-    rack32.println(F("[stio] missing output index"));
+    oxrs.println(F("[stio] missing output index"));
     return 0;
   }
   
@@ -663,7 +672,7 @@ uint8_t getOutputIndex(JsonVariant json)
   // Check the index is valid for this device
   if (index < getMinOutputIndex() || index > getMaxOutputIndex())
   {
-    rack32.println(F("[stio] invalid output index"));
+    oxrs.println(F("[stio] invalid output index"));
     return 0;
   }
 
@@ -721,7 +730,7 @@ void jsonOutputConfig(JsonVariant json)
       }
       else
       {
-        rack32.println(F("[stio] lock must be with pin on same mcp"));
+        oxrs.println(F("[stio] lock must be with pin on same mcp"));
       }
     }
   }
@@ -827,7 +836,7 @@ void setCommandSchema()
   }
 
   // Pass our command schema down to the Rack32 library
-  rack32.setCommandSchema(command);
+  oxrs.setCommandSchema(command);
 }
 
 void publishOutputEvent(uint8_t index, uint8_t type, uint8_t state)
@@ -842,7 +851,7 @@ void publishOutputEvent(uint8_t index, uint8_t type, uint8_t state)
   json["type"] = outputType;
   json["event"] = eventType;
   
-  if (!rack32.publishStatus(json.as<JsonVariant>()))
+  if (!oxrs.publishStatus(json.as<JsonVariant>()))
   {
     Serial.print(F("[stio] [failover] "));
     serializeJson(json, Serial);
@@ -868,7 +877,7 @@ void jsonOutputCommand(JsonVariant json)
   {
     if (parseOutputType(json["type"]) != type)
     {
-      rack32.println(F("[stio] command type doesn't match configured type"));
+      oxrs.println(F("[stio] command type doesn't match configured type"));
       return;
     }
   }
@@ -894,7 +903,7 @@ void jsonOutputCommand(JsonVariant json)
       }
       else 
       {
-        rack32.println(F("[stio] invalid command"));
+        oxrs.println(F("[stio] invalid command"));
       }
     }
   }
@@ -930,7 +939,7 @@ void publishInputEvent(uint8_t index, uint8_t type, uint8_t state)
   json["type"] = inputType;
   json["event"] = eventType;
 
-  if (!rack32.publishStatus(json.as<JsonVariant>()))
+  if (!oxrs.publishStatus(json.as<JsonVariant>()))
   {
     Serial.print(F("[stio] [failover] "));
     serializeJson(json, Serial);
@@ -974,13 +983,13 @@ void outputEvent(uint8_t id, uint8_t output, uint8_t type, uint8_t state)
  */
 void configureI2CBus()
 {
-  rack32.println(F("[stio] configuring I/O buffers..."));
+  oxrs.println(F("[stio] configuring I/O buffers..."));
 
   for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
   {
-    rack32.print(F(" - 0x"));
-    rack32.print(MCP_I2C_ADDRESS[mcp], HEX);
-    rack32.print(F("..."));
+    oxrs.print(F(" - 0x"));
+    oxrs.print(MCP_I2C_ADDRESS[mcp], HEX);
+    oxrs.print(F("..."));
 
     // Check if an MCP was found on this address
     if (bitRead(g_mcps_found, mcp))
@@ -995,9 +1004,9 @@ void configureI2CBus()
         {
           mcp23017[mcp].pinMode(pin, MCP_INTERNAL_PULLUPS ? INPUT_PULLUP : INPUT);
         }
-        rack32.print(F("MCP23017 [input]"));
-        if (MCP_INTERNAL_PULLUPS) { rack32.print(F(" (internal pullups)")); }
-        rack32.println();
+        oxrs.print(F("MCP23017 [input]"));
+        if (MCP_INTERNAL_PULLUPS) { oxrs.print(F(" (internal pullups)")); }
+        oxrs.println();
       }
       else
       {
@@ -1007,12 +1016,12 @@ void configureI2CBus()
           mcp23017[mcp].pinMode(pin, OUTPUT);
           mcp23017[mcp].digitalWrite(pin, RELAY_OFF);
         }
-         rack32.println(F("MCP23017 [output]"));
+         oxrs.println(F("MCP23017 [output]"));
       }
     }
     else
     {
-      rack32.println(F("empty"));
+      oxrs.println(F("empty"));
     }
   }
 }
@@ -1020,7 +1029,7 @@ void configureI2CBus()
 
 void scanI2CBus()
 {
-  rack32.println(F("[stio] scanning for I/O buffers..."));
+  oxrs.println(F("[stio] scanning for I/O buffers..."));
 
   for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
   {
@@ -1048,6 +1057,7 @@ void setup()
   Serial.begin(SERIAL_BAUD_RATE);
   delay(1000);
   Serial.println(F("[stio] starting up..."));
+  Serial.println(ESP.getFreeHeap());
 
   // Start the I2C bus
   Wire.begin();
@@ -1056,7 +1066,7 @@ void setup()
   scanI2CBus();
 
   // Start Rack32 hardware
-  rack32.begin(jsonConfig, jsonCommand);
+  oxrs.begin(jsonConfig, jsonCommand);
 
   // set up I2C-I/O buffers
   configureI2CBus();
@@ -1065,25 +1075,26 @@ void setup()
   Wire.setClock(I2C_CLOCK_SPEED);
 
   // Set up port display (depends on g_mcp_output_start)
+  #if defined(OXRS_RACK32)
   bool err_output_start = false;
   if (g_mcp_output_pins == 8)
   {
     switch (g_mcp_output_start)
     {
     case 0:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO_8);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO_8);
       break;
     case 2:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96_8);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96_8);
       break;
     case 4:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64_8);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64_8);
       break;
     case 6:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32_8);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32_8);
       break;
     case 8:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);
       break;
     default:
       err_output_start = true;
@@ -1094,19 +1105,19 @@ void setup()
     switch (g_mcp_output_start)
     {
     case 0:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO);
       break;
     case 2:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96);
       break;
     case 4:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64);
       break;
     case 6:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32);
       break;
     case 8:
-      rack32.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);
+      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);
       break;
     default:
       err_output_start = true;
@@ -1114,13 +1125,15 @@ void setup()
   }
   if (err_output_start)
   {
-    rack32.print(F("[stio] invalid g_mcp_output_start: "));
-    rack32.println(g_mcp_output_start);
+    oxrs.print(F("[stio] invalid g_mcp_output_start: "));
+    oxrs.println(g_mcp_output_start);
   }
+  #endif
 
   // Set up config/command schema (for self-discovery and adoption)
   setConfigSchema();
   setCommandSchema();
+  Serial.println(ESP.getFreeHeap());
 }
 
 /**
@@ -1129,9 +1142,11 @@ void setup()
 void loop()
 {
   // Let Rack32 hardware handle any events etc
-  rack32.loop();
+  oxrs.loop();
 
-  // Iterate through each of the MCP23017s
+  if ((++_loopCounter % 10000) == 0)
+    Serial.println(ESP.getFreeHeap());
+      // Iterate through each of the MCP23017s
   for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
   {
     if (bitRead(g_mcps_found, mcp) == 0)
@@ -1147,8 +1162,10 @@ void loop()
     uint16_t io_value = mcp23017[mcp].readGPIOAB();
 
     // Show port animations
-    rack32.updateDisplayPorts(mcp, io_value);
-
+    #if defined(OXRS_RACK32)
+    oxrs.updateDisplayPorts(mcp, io_value);
+    #endif
+    
     // Check for any input events
     if (isInputMcp(mcp))
     {
