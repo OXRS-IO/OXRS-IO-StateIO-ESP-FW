@@ -76,7 +76,6 @@ uint8_t g_mcp_output_pins = MCP_PIN_COUNT;
 // *  8 -> 8 INP / 0 OUTP ; PORT_LAYOUT_INPUT_AUTO  (input only)
 uint8_t g_mcp_output_start = MCP_COUNT;
 
-long _loopCounter = 0;
 /*--------------------------- Global Objects -----------------------------*/
 // I/O buffers
 Adafruit_MCP23X17 mcp23017[MCP_COUNT];
@@ -1057,7 +1056,6 @@ void setup()
   Serial.begin(SERIAL_BAUD_RATE);
   delay(1000);
   Serial.println(F("[stio] starting up..."));
-  Serial.println(ESP.getFreeHeap());
 
   // Start the I2C bus
   Wire.begin();
@@ -1133,7 +1131,6 @@ void setup()
   // Set up config/command schema (for self-discovery and adoption)
   setConfigSchema();
   setCommandSchema();
-  Serial.println(ESP.getFreeHeap());
 }
 
 /**
@@ -1144,9 +1141,7 @@ void loop()
   // Let Rack32 hardware handle any events etc
   oxrs.loop();
 
-  if ((++_loopCounter % 10000) == 0)
-    Serial.println(ESP.getFreeHeap());
-      // Iterate through each of the MCP23017s
+  // Iterate through each of the MCP23017s
   for (uint8_t mcp = 0; mcp < MCP_COUNT; mcp++)
   {
     if (bitRead(g_mcps_found, mcp) == 0)
