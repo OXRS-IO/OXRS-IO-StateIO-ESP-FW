@@ -8,9 +8,9 @@ config = env.GetProjectConfig()
 # set the required firmware name (ESP8622  or  ESP32)
 env_name = env.subst("$PIOENV")
 if "8266" in env_name:
-  firmware_name_raw = config.get("firmware", "name_room8266")
+  firmware_name_raw = config.get("firmware", "name_esp8266")
 else:
-  firmware_name_raw = config.get("firmware", "name_rack32")
+  firmware_name_raw = config.get("firmware", "name_esp32")
 
 firmware_name = firmware_name_raw.replace('\\\"', '')
 print("Firmware Name: %s" % firmware_name)
