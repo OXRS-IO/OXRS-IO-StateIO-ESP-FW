@@ -36,7 +36,7 @@ jobs:
         pip install --upgrade platformio
     
     - name: Build release binary
-      run: pio run -e rack32-eth -e rack32-wifi -e room8266-eth -e room8266-wifi
+      run: pio run -e rack32-eth_ESP32 -e rack32-wifi_ESP32 -e room8266-eth_ESP8266 -e room8266-wifi_ESP8266
 
     - name: Create release
       uses: ncipollo/release-action@v1
