@@ -6,11 +6,11 @@ platform = env.PioPlatform()
 if (os.name == 'nt'):
   env.AddPostAction(
       "$BUILD_DIR\${PROGNAME}.bin",
-      "copy $BUILD_DIR\${PROGNAME}.bin $BUILD_DIR\${PROGNAME}_FLASHER.bin" 
+      "copy $BUILD_DIR\${PROGNAME}.bin $BUILD_DIR\${PROGNAME_RAW}_FLASH.bin" 
   )
 else:
   env.AddPostAction(
       "$BUILD_DIR/${PROGNAME}.bin",
-      "cp $BUILD_DIR/${PROGNAME}.bin $BUILD_DIR/${PROGNAME}_FLASHER.bin" 
+      "cp $BUILD_DIR/${PROGNAME}.bin $BUILD_DIR/${PROGNAME_RAW}_FLASH.bin" 
   )
 
