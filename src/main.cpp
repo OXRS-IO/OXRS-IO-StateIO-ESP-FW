@@ -1,5 +1,5 @@
 /**
-  ESP32 state input and output firmware for the Open eXtensible Rack System
+  ESP state input and output firmware for the Open eXtensible Rack System
 
   Documentation:
     https://oxrs.io/docs/firmware/state-io-esp32.html
@@ -10,9 +10,7 @@
     https://bmdesigns.com.au/shop/relay16-16-channel-relay-driver/
 
   GitHub repository:
-    https://github.com/SuperHouse/OXRS-SHA-StateIO-ESP32-FW
-
-  Copyright 2019-2022 SuperHouse Automation Pty Ltd
+    https://github.com/OXRS-IO/OXRS-IO-StateIO-ESP-FW
 */
 
 
