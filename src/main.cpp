@@ -53,6 +53,9 @@ const uint8_t MCP_COUNT             = sizeof(MCP_I2C_ADDRESS);
 // Each bit corresponds to an MCP found on the IC2 bus
 uint8_t g_mcps_found = 0;
 
+// Query current value of all bi-stable inputs
+bool g_queryInputs = false;
+
 // How many pins on each MCP are we controlling (defaults to all 16)
 // Set via "outputsPerMcp" integer config option - should be set via
 // the REST API so it is persisted to SPIFFS and loaded early enough
@@ -782,6 +785,18 @@ void jsonConfig(JsonVariant json)
   }  
 }
 
+void inputCommandSchema(JsonVariant json)
+{
+  JsonObject inputs = json.createNestedObject("inputs");
+  inputs["title"] = "Input Commands";
+  inputs["description"] = "Query and publish the state of all bi-stable inputs.";
+  inputs["type"] = "object";
+
+  JsonObject queryInputs = json.createNestedObject("queryInputs");
+  queryInputs["title"] = "Query Inputs";
+  queryInputs["type"] = "boolean";
+}
+
 void outputCommandSchema(JsonVariant json)
 {
   JsonObject outputs = json.createNestedObject("outputs");
@@ -825,6 +840,12 @@ void setCommandSchema()
   // Define our config schema
   StaticJsonDocument<2048> json;
   JsonVariant command = json.as<JsonVariant>();
+
+  // Do we have any input MCPs?
+  if (isInputMcp(0))
+  {
+    inputCommandSchema(command);
+  }
 
   // Do we have any output MCPs?
   if (isOutputMcp(MCP_COUNT - 1))
@@ -908,6 +929,11 @@ void jsonOutputCommand(JsonVariant json)
 
 void jsonCommand(JsonVariant json)
 {
+  if (json.containsKey("queryInputs"))
+  {
+    g_queryInputs = json["queryInputs"].as<bool>();
+  }
+
   if (json.containsKey("outputs"))
   {
     for (JsonVariant output : json["outputs"].as<JsonArray>())
@@ -1164,6 +1190,15 @@ void loop()
     {
       // Check for any input events
       oxrsInput[mcp].process(mcp, io_value);
+ 
+      // Check if we are querying the current values
+      if (g_queryInputs)
+      {
+        oxrsInput[mcp].queryAll(mcp);
+      }
     }
   }
+
+  // Ensure we don't keep querying
+  g_queryInputs = false;
 }
