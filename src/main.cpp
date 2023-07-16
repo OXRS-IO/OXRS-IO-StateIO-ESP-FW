@@ -343,10 +343,10 @@ void setInputType(uint8_t mcp, uint8_t pin, uint8_t inputType)
   switch (inputType)
   {
   case SECURITY:
-    oxrs.setDisplayPinType(mcp, pin, PIN_TYPE_SECURITY);
+    oxrs.getLCD()->setPinType(mcp, pin, PIN_TYPE_SECURITY);
     break;
   default:
-    oxrs.setDisplayPinType(mcp, pin, PIN_TYPE_DEFAULT);
+    oxrs.getLCD()->setPinType(mcp, pin, PIN_TYPE_DEFAULT);
     break;
   }
   #endif
@@ -359,7 +359,7 @@ void setInputInvert(uint8_t mcp, uint8_t pin, int invert)
 {
   // Configure the display
   #if defined(OXRS_RACK32)
-  oxrs.setDisplayPinInvert(mcp, pin, invert);
+  oxrs.getLCD()->setPinInvert(mcp, pin, invert);
   #endif
 
   // Pass this update to the input handler
@@ -370,7 +370,7 @@ void setInputDisabled(uint8_t mcp, uint8_t pin, int disabled)
 {
   // Configure the display
   #if defined(OXRS_RACK32)
-  oxrs.setDisplayPinDisabled(mcp, pin, disabled);
+  oxrs.getLCD()->setPinDisabled(mcp, pin, disabled);
   #endif
 
   // Pass this update to the input handler
@@ -1104,19 +1104,19 @@ void setup()
     switch (g_mcp_output_start)
     {
     case 0:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO_8);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_OUTPUT_AUTO_8, g_mcps_found);
       break;
     case 2:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96_8);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_IO_32_96_8, g_mcps_found);
       break;
     case 4:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64_8);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_IO_64_64_8, g_mcps_found);
       break;
     case 6:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32_8);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_IO_96_32_8, g_mcps_found);
       break;
     case 8:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_INPUT_AUTO, g_mcps_found);
       break;
     default:
       err_output_start = true;
@@ -1127,19 +1127,19 @@ void setup()
     switch (g_mcp_output_start)
     {
     case 0:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_OUTPUT_AUTO);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_OUTPUT_AUTO, g_mcps_found);
       break;
     case 2:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_32_96);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_IO_32_96, g_mcps_found);
       break;
     case 4:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_64_64);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_IO_64_64, g_mcps_found);
       break;
     case 6:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_IO_96_32);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_IO_96_32, g_mcps_found);
       break;
     case 8:
-      oxrs.setDisplayPortLayout(g_mcps_found, PORT_LAYOUT_INPUT_AUTO);
+      oxrs.getLCD()->drawPorts(PORT_LAYOUT_INPUT_AUTO, g_mcps_found);
       break;
     default:
       err_output_start = true;
@@ -1182,7 +1182,7 @@ void loop()
 
     // Show port animations
     #if defined(OXRS_RACK32)
-    oxrs.updateDisplayPorts(mcp, io_value);
+    oxrs.getLCD()->process(mcp, io_value);
     #endif
     
     // Check for any input events
