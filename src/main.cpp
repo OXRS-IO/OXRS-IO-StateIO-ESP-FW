@@ -224,6 +224,9 @@ void getInputEventType(char eventType[], uint8_t type, uint8_t state)
     case HOLD_EVENT:
       sprintf_P(eventType, PSTR("hold"));
       break;
+    case RELEASE_EVENT:
+      sprintf_P(eventType, PSTR("release"));
+      break;
     case 1:
       sprintf_P(eventType, PSTR("single"));
       break;
@@ -952,7 +955,7 @@ void publishInputEvent(uint8_t index, uint8_t type, uint8_t state)
 
   char inputType[9];
   getInputType(inputType, type);
-  char eventType[7];
+  char eventType[8];
   getInputEventType(eventType, type, state);
 
   StaticJsonDocument<128> json;
